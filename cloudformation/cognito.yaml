@@ -1,0 +1,93 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Template to create AWS Cognito
+Resources:
+  CognitoUserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: notesCloudAppUserPool
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 6
+          RequireUppercase: false
+          RequireLowercase: false
+          RequireNumbers: false
+          RequireSymbols: false
+          TemporaryPasswordValidityDays: 7
+      UsernameConfiguration:
+        CaseSensitive: false
+      AutoVerifiedAttributes:
+        - email
+      UsernameAttributes:
+        - email
+      MfaConfiguration: 'OFF'
+      VerificationMessageTemplate:
+        DefaultEmailOption: CONFIRM_WITH_CODE
+      EmailConfiguration:
+        EmailSendingAccount: COGNITO_DEFAULT
+      AdminCreateUserConfig:
+        AllowAdminCreateUserOnly: false
+      UserPoolTags: {}
+      AccountRecoverySetting:
+        RecoveryMechanisms:
+          - Priority: 1
+            Name: verified_email
+  CognitoUserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      ClientName: appClient
+      UserPoolId: !Ref CognitoUserPool
+      RefreshTokenValidity: 30
+      ExplicitAuthFlows:
+        - ALLOW_REFRESH_TOKEN_AUTH
+        - ALLOW_USER_SRP_AUTH
+      PreventUserExistenceErrors: ENABLED
+      AllowedOAuthFlowsUserPoolClient: false
+      IdTokenValidity: 60
+      AccessTokenValidity: 60
+      TokenValidityUnits:
+        AccessToken: minutes
+        IdToken: minutes
+        RefreshToken: days
+      ReadAttributes:
+        - address
+        - birthdate
+        - email
+        - email_verified
+        - family_name
+        - gender
+        - given_name
+        - locale
+        - middle_name
+        - name
+        - nickname
+        - phone_number
+        - phone_number_verified
+        - picture
+        - preferred_username
+        - profile
+        - updated_at
+        - website
+        - zoneinfo
+      WriteAttributes:
+        - address
+        - birthdate
+        - email
+        - family_name
+        - gender
+        - given_name
+        - locale
+        - middle_name
+        - name
+        - nickname
+        - phone_number
+        - picture
+        - preferred_username
+        - profile
+        - updated_at
+        - website
+        - zoneinfo
+Outputs:
+  UserPoolId:
+    Value: !Ref CognitoUserPool
+  UserPoolClientId:
+    Value: !Ref CognitoUserPoolClient

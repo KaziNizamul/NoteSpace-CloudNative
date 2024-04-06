@@ -1,0 +1,221 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: ""
+Resources:
+  ApiGatewayRestApi:
+    Type: "AWS::ApiGateway::RestApi"
+    Properties:
+      Name: "restAPI"
+      ApiKeySourceType: "HEADER"
+      EndpointConfiguration:
+        Types:
+          - "REGIONAL"
+  ApiGatewayStage:
+    Type: "AWS::ApiGateway::Stage"
+    Properties:
+      StageName: "dev"
+      DeploymentId: !Ref ApiGatewayDeployment
+      RestApiId: !Ref ApiGatewayRestApi
+      CacheClusterEnabled: false
+      CacheClusterSize: "0.5"
+      TracingEnabled: false
+  ApiGatewayDeployment:
+    Type: "AWS::ApiGateway::Deployment"
+    Properties:
+      RestApiId: !Ref ApiGatewayRestApi
+  ApiGatewayResource:
+    Type: "AWS::ApiGateway::Resource"
+    Properties:
+      RestApiId: !Ref ApiGatewayRestApi
+      PathPart: "{id+}"
+      ParentId: !Ref ApiGatewayResource2
+  ApiGatewayResource2:
+    Type: "AWS::ApiGateway::Resource"
+    Properties:
+      RestApiId: !Ref ApiGatewayRestApi
+      PathPart: "notes"
+      ParentId: !GetAtt ApiGatewayRestApi.RootResourceId
+  
+  GetNoteByIdApiGatewayMethod:
+    Type: "AWS::ApiGateway::Method"
+    Properties:
+      ApiKeyRequired: false
+      AuthorizationType: "NONE"
+      HttpMethod: "GET"
+      Integration:
+        CacheKeyParameters:
+          - "method.request.path.id"
+        CacheNamespace: !Ref ApiGatewayResource
+        ContentHandling: "CONVERT_TO_TEXT"
+        IntegrationHttpMethod: "POST"
+        IntegrationResponses:
+          - ResponseTemplates: {}
+            StatusCode: "200"
+        PassthroughBehavior: "WHEN_NO_MATCH"
+        TimeoutInMillis: 29000
+        Type: "AWS_PROXY"
+        Uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${LambdaGetNoteById}/invocations"
+      MethodResponses:
+        - ResponseModels:
+            "application/json": "Empty"
+          StatusCode: "200"
+      RestApiId: !Ref ApiGatewayRestApi
+      ResourceId: !Ref ApiGatewayResource
+      RequestParameters:
+        "method.request.path.id": true
+      RequestModels: {}
+  DeleteNoteApiGatewayMethod:
+    Type: "AWS::ApiGateway::Method"
+    Properties:
+      RestApiId: !Ref ApiGatewayRestApi
+      ResourceId: !Ref ApiGatewayResource
+      HttpMethod: "DELETE"
+      AuthorizationType: "NONE"
+      ApiKeyRequired: false
+      RequestParameters:
+        "method.request.path.id": true
+      RequestModels: {}
+      MethodResponses:
+        - ResponseModels:
+            "application/json": "Empty"
+          StatusCode: "200"
+      Integration:
+        CacheKeyParameters:
+          - "method.request.path.id"
+        CacheNamespace: !Ref ApiGatewayResource
+        ContentHandling: "CONVERT_TO_TEXT"
+        IntegrationHttpMethod: "POST"
+        IntegrationResponses:
+          - ResponseTemplates: {}
+            StatusCode: "200"
+        PassthroughBehavior: "WHEN_NO_MATCH"
+        TimeoutInMillis: 29000
+        Type: "AWS_PROXY"
+        Uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${LambdaDeleteNote}/invocations"
+  UpdateNoteApiGatewayMethod:
+    Type: "AWS::ApiGateway::Method"
+    Properties:
+      RestApiId: !Ref ApiGatewayRestApi
+      ResourceId: !Ref ApiGatewayResource
+      HttpMethod: "PUT"
+      AuthorizationType: "NONE"
+      ApiKeyRequired: false
+      RequestParameters:
+        "method.request.path.id": true
+      RequestModels: {}
+      MethodResponses:
+        - ResponseModels:
+            "application/json": "Empty"
+          StatusCode: "200"
+      Integration:
+        CacheKeyParameters:
+          - "method.request.path.id"
+        CacheNamespace: !Ref ApiGatewayResource
+        ContentHandling: "CONVERT_TO_TEXT"
+        IntegrationHttpMethod: "POST"
+        IntegrationResponses:
+          - ResponseTemplates: {}
+            StatusCode: "200"
+        PassthroughBehavior: "WHEN_NO_MATCH"
+        TimeoutInMillis: 29000
+        Type: "AWS_PROXY"
+        Uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${LambdaUpdateNote}/invocations"
+  OptionsProxyApiGatewayMethod:
+    Type: "AWS::ApiGateway::Method"
+    Properties:
+      RestApiId: !Ref ApiGatewayRestApi
+      ResourceId: !Ref ApiGatewayResource
+      HttpMethod: "OPTIONS"
+      AuthorizationType: "NONE"
+      ApiKeyRequired: false
+      RequestParameters:
+        "method.request.path.id": true
+      RequestModels: {}
+      MethodResponses:
+        - ResponseModels:
+            "application/json": "Empty"
+          StatusCode: "200"
+      Integration:
+        CacheKeyParameters:
+          - "method.request.path.id"
+        CacheNamespace: !Ref ApiGatewayResource
+        ContentHandling: "CONVERT_TO_TEXT"
+        IntegrationHttpMethod: "POST"
+        IntegrationResponses:
+          - ResponseTemplates: {}
+            StatusCode: "200"
+        PassthroughBehavior: "WHEN_NO_MATCH"
+        TimeoutInMillis: 29000
+        Type: "AWS_PROXY"
+        Uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${LambdaOptionsResponse}/invocations"
+  GetAllNoteApiGatewayMethod:
+    Type: "AWS::ApiGateway::Method"
+    Properties:
+      RestApiId: !Ref ApiGatewayRestApi
+      ResourceId: !Ref ApiGatewayResource2
+      HttpMethod: "GET"
+      AuthorizationType: "NONE"
+      ApiKeyRequired: false
+      RequestParameters: {}
+      RequestModels: {}
+      MethodResponses:
+        - ResponseModels:
+            "application/json": "Empty"
+          StatusCode: "200"
+      Integration:
+        CacheNamespace: !Ref ApiGatewayResource2
+        ContentHandling: "CONVERT_TO_TEXT"
+        IntegrationHttpMethod: "POST"
+        IntegrationResponses:
+          - ResponseTemplates: {}
+            StatusCode: "200"
+        PassthroughBehavior: "WHEN_NO_MATCH"
+        TimeoutInMillis: 29000
+        Type: "AWS_PROXY"
+        Uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${LambdaGetAllNote}/invocations"
+  CreateNoteApiGatewayMethod:
+    Type: "AWS::ApiGateway::Method"
+    Properties:
+      RestApiId: !Ref ApiGatewayRestApi
+      ResourceId: !Ref ApiGatewayResource2
+      HttpMethod: "POST"
+      AuthorizationType: "NONE"
+      ApiKeyRequired: false
+      RequestParameters: {}
+      RequestModels: {}
+      MethodResponses:
+        - ResponseModels:
+            "application/json": "Empty"
+          StatusCode: "200"
+      Integration:
+        CacheNamespace: !Ref ApiGatewayResource2
+        ContentHandling: "CONVERT_TO_TEXT"
+        IntegrationHttpMethod: "POST"
+        IntegrationResponses:
+          - ResponseTemplates: {}
+            StatusCode: "200"
+        PassthroughBehavior: "WHEN_NO_MATCH"
+        TimeoutInMillis: 29000
+        Type: "AWS_PROXY"
+        Uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${LambdaCreateNote}/invocations"
+  OptionsMockApiGatewayMethod:
+    Type: "AWS::ApiGateway::Method"
+    Properties:
+      RestApiId: !Ref ApiGatewayRestApi
+      ResourceId: !Ref ApiGatewayResource2
+      HttpMethod: "OPTIONS"
+      AuthorizationType: "NONE"
+      ApiKeyRequired: false
+      RequestParameters: {}
+      MethodResponses:
+        - ResponseModels:
+            "application/json": "Empty"
+          StatusCode: "200"
+      Integration:
+        CacheNamespace: !Ref ApiGatewayResource2
+        IntegrationResponses:
+          - StatusCode: "200"
+        PassthroughBehavior: "WHEN_NO_MATCH"
+        RequestTemplates:
+          "application/json": '{"statusCode": 200}'
+        TimeoutInMillis: 29000
+        Type: "MOCK"

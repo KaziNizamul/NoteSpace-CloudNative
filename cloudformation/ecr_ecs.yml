@@ -1,0 +1,223 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Combined template for creating ECS Cluster and Service
+Parameters:
+  ECSClusterName:
+    Type: String
+    Default: notesApps-Cloud-Cluster
+    Description: Specifies the ECS Cluster Name
+  ECSServiceName:
+    Type: String
+    Default: notesApps-Cloud-Service
+    Description: Specifies the ECS Service Name
+  SecurityGroupIds:
+    Type: CommaDelimitedList
+    Description: Optional - Specifies the Comma separated list of the Security Group Id of an existing Security Group.
+    Default: ""
+  VpcId:
+    Type: String
+    Description: |
+      Optional - Specifies the ID of an existing VPC in which to launch your container instances. If you specify a VPC ID, you must specify a list of existing subnets in that VPC. If you do not specify a VPC ID, a new VPC is created with at least 1 subnet.
+    Default: ""
+    AllowedPattern: ^(?:vpc-[0-9a-f]{8,17}|)$
+    ConstraintDescription: VPC Id must begin with 'vpc-' and have a valid uuid
+  SubnetIds:
+    Type: CommaDelimitedList
+    Description: |
+      Optional - Specifies the Comma separated list of existing VPC Subnet Ids where ECS instances will run
+    Default: ""
+
+Resources:
+  ECRRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: "notesApps-Cloud-Repo"
+      LifecyclePolicy:
+        RegistryId: !Ref AWS::AccountId
+  ECSCluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: !Ref ECSClusterName
+      CapacityProviders:
+        - FARGATE
+        - FARGATE_SPOT
+      ClusterSettings:
+        - Name: containerInsights
+          Value: enabled
+      Configuration:
+        ExecuteCommandConfiguration:
+          Logging: DEFAULT
+      ServiceConnectDefaults:
+        Namespace: !Ref ECSClusterName
+      Tags: []
+  ECSTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      ContainerDefinitions:
+        - Environment:
+            - Name: "VITE_SAK"
+              Value: "nYdFk6hOW7e2pY8GNjEJEjzgFk3MF7PXJdSHMTWm"
+            - Name: "VITE_AKID"
+              Value: "ASIAQ3EGROXQN6YIRI52"
+            - Name: "VITE_ST"
+              Value: "IQoJb3JpZ2luX2VjEHEaCXVzLXdlc3QtMiJGMEQCIF3bQp0ZODcBSvmiOp7KKXC2+G6BwVUAd48OVssd5MhDAiAB916HUvTZC+mXYlf4hDU0s1tDabvQcCJ6DkoO4/p5kCqyAgia//////////8BEAAaDDA1ODI2NDIyMTE1MiIMhSo/cMNRuYWpm5KgKoYCjwINnob29wV6gkyH2qFH4qZgmWmYM5nk+w5ZxegLSUtaHGpcAQTzYC9rfq8RBcDtGMrc9rWkhRf7OW99Dd95VHwp5TerxIq7vdF1yVckaDAa8OiyLsiCoEZzlGCV5GHdjPelQIEZ/3cTeI37XCXE0OjKoxS33Wty8QoLtYYElAXuArcRrgPwVMltE/svO+YkL9Bj0fznoZlDV/rovUz3Ntmu3N2Tn4vauSdsX/vXzlI9+PnH9TDg9a56Ec7HOb3J3Vc1TF/gxWiwW4A1iV+S7JGGJp/NGvCpwCQxB+robcJRwkkaQ55OS2F6CzuIfm52B/5JnUeXf9ORBQQ3M85i6BF3NeyDcTC6n72wBjqeAdvYa90KMi3JdH4gUPMVG65uZXrN+enSYONrkAo0CFbCdNynA9oDY/r67iXu4NdnwOOc1hf0WW3yGLVR17930ZAZCm67mE+SI5QLVAi3LN9B5fTS32AgBw3SSOCNnIhphL10bqidvExXhM1BPhF2OpJnjQICs10tU/yph7YrUWZpbPDqQ0RTWddk78XUlleA9nYLAGaPk9qUT0xS1Nrc"
+            - Name: "VITE_AWS_REGION"
+              Value: !Ref AWS::Region
+            - Name: "VITE_SNS_TOPIC_ARN"
+              Value: !Ref SNSTopic
+          Essential: true
+          Image: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/notesCloudApp:latest"
+          LogConfiguration:
+            LogDriver: "awslogs"
+            Options:
+              awslogs-create-group: "true"
+              awslogs-group: "/ecs/notesApps-Cloud-Task"
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: "ecs"
+          Name: notesApps-Cloud-Container
+          PortMappings:
+            - ContainerPort: 80
+              HostPort: 80
+              Protocol: "tcp"
+      Family: "notesApps-Cloud-Task"
+      TaskRoleArn: !Sub "arn:aws:iam::${AWS::AccountId}:role/LabRole"
+      ExecutionRoleArn: !Sub "arn:aws:iam::${AWS::AccountId}:role/LabRole"
+      NetworkMode: "awsvpc"
+      RequiresCompatibilities:
+        - FARGATE
+      Cpu: 1024
+      Memory: 3072
+  ECSService:
+    Type: AWS::ECS::Service
+    Properties:
+      Cluster: !Ref ECSCluster
+      CapacityProviderStrategy:
+        - CapacityProvider: FARGATE
+          Base: 0
+          Weight: 1
+      DeploymentConfiguration:
+        MaximumPercent: 200
+        MinimumHealthyPercent: 100
+        DeploymentCircuitBreaker:
+          Enable: true
+          Rollback: true
+      DeploymentController:
+        Type: ECS
+      DesiredCount: 1
+      EnableECSManagedTags: true
+      HealthCheckGracePeriodSeconds: 20
+      LoadBalancers:
+        - ContainerName: notesApps-Cloud-Container
+          ContainerPort: 80
+          LoadBalancerName: !Ref AWS::NoValue
+          TargetGroupArn: !Ref TargetGroup
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: ENABLED
+          SecurityGroups: !If
+            - HasSecurityGroups
+            - !Ref SecurityGroupIds
+            - !Ref AWS::NoValue
+          Subnets: !If
+            - HasSubnets
+            - !Ref SubnetIds
+            - !Ref AWS::NoValue
+      PlatformVersion: LATEST
+      Role: !Sub "arn:aws:iam::${AWS::AccountId}:role/aws-service-role/ecs.amazonaws.com/AWSServiceRoleForECS"
+      TaskDefinition: !Ref ECSTaskDefinition
+      ServiceName: !Ref ECSServiceName
+      ServiceConnectConfiguration:
+        Enabled: false
+      SchedulingStrategy: REPLICA
+      Tags: []
+  SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: notesApps-Cloud-SecurityGroup
+      GroupName: notesApps-Cloud-SecurityGroup
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - FromPort: -1
+          ToPort: -1
+          IpProtocol: '-1'
+          CidrIp: 0.0.0.0/0
+        - FromPort: -1
+          ToPort: -1
+          IpProtocol: '-1'
+          CidrIpv6: '::/0'
+        - FromPort: 80
+          ToPort: 80
+          IpProtocol: tcp
+          CidrIp: 0.0.0.0/0
+        - FromPort: 80
+          ToPort: 80
+          IpProtocol: tcp
+          CidrIpv6: '::/0'
+  LoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Type: application
+      Name: notesApps-Cloud-loadBalancer
+      SecurityGroups:
+        - !Ref SecurityGroup
+      Subnets: !If
+        - HasSubnets
+        - !Ref SubnetIds
+        - !Ref AWS::NoValue
+  TargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckPath: /
+      Name: notesApps-Cloud-TargetGroup
+      Port: 80
+      Protocol: HTTP
+      TargetType: ip
+      HealthCheckProtocol: HTTP
+      VpcId: !Ref VpcId
+      TargetGroupAttributes:
+        - Key: deregistration_delay.timeout_seconds
+          Value: 300
+  Listener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      Name: notesApps-Cloud-Listener
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref TargetGroup
+      LoadBalancerArn: !Ref LoadBalancer
+      Port: 80
+      Protocol: HTTP
+
+Outputs:
+  ECRRepository:
+    Description: ecr created successfully
+    Value: !Ref ECRRepository
+  ECSCluster:
+    Description: cluster created successfully
+    Value: !Ref ECSCluster
+  ECSTaskDefinition:
+    Description: task definition created successfully
+    Value: !Ref ECSTaskDefinition
+  ECSService:
+    Description: service created successfully
+    Value: !Ref ECSService
+  SecurityGroup:
+    Description: security group created successfully
+    Value: !Ref SecurityGroup
+  LoadBalancer:
+    Description: load balancer created successfully
+    Value: !Ref LoadBalancer
+  TargetGroup:
+    Description: target group created successfully
+    Value: !Ref TargetGroup
+  Listener:
+    Description: listener created successfully
+    Value: !Ref Listener
+Conditions:
+  HasSecurityGroups: !Not
+    - !Equals
+      - !Ref SecurityGroupIds
+      - ''
+  HasSubnets: !Not
+    - !Equals
+      - !Ref SubnetIds
+      - ''

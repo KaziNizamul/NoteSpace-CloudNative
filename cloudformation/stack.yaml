@@ -1,0 +1,1030 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: stack
+Parameters:
+  ECSClusterName:
+    Type: String
+    Default: notes-app-cloud-cluster
+    Description: Specifies the ECS Cluster Name
+  ECSServiceName:
+    Type: String
+    Default: notes-app-cloud-service
+    Description: Specifies the ECS Service Name
+  SecurityGroupIds:
+    Type: CommaDelimitedList
+    Description: Optional - Specifies the Comma separated list of the Security Group Id of an existing Security Group.
+    Default: sg-03993c63c2c966704
+  VpcId:
+    Type: String
+    Description: |
+      Optional - Specifies the ID of an existing VPC in which to launch your container instances. If you specify a VPC ID, you must specify a list of existing subnets in that VPC. If you do not specify a VPC ID, a new VPC is created with at least 1 subnet.
+    Default: vpc-093238540741f567e
+  SubnetIds:
+    Type: CommaDelimitedList
+    Description: |
+      Optional - Specifies the Comma separated list of existing VPC Subnet Ids where ECS instances will run
+    Default: subnet-0be74541e5529b935,subnet-0f03c59ef52f4e5ed
+Resources:
+  LambdaGetAllNote:
+    Type: AWS::Lambda::Function
+    Properties:
+      Description: getNotes
+      FunctionName: get-all-note-fn
+      Handler: index.handler
+      Architectures:
+        - x86_64
+      Code:
+        ZipFile: |
+          const { DynamoDBClient, ScanCommand } = require("@aws-sdk/client-dynamodb");
+          const { DynamoDBDocumentClient } = require("@aws-sdk/lib-dynamodb");
+          const dynamodbClient = new DynamoDBClient({});
+          const dynamo = DynamoDBDocumentClient.from(dynamodbClient);
+          const notesTableName = 'notes';
+
+          exports.handler = async (event, context) => {
+            try {
+              const params = {
+                TableName: notesTableName,
+              };
+              const { Items } = await dynamo.send(new ScanCommand(params));
+              const formattedItems = Items.map(item => {
+                const formattedItem = {};
+                for (const key in item) {
+                  formattedItem[key] = item[key].S;
+                }
+                return formattedItem;
+              });
+              return {
+                statusCode: 200,
+                body: JSON.stringify(formattedItems),
+              };
+            } catch (err) {
+              return {
+                statusCode: 500,
+                body: JSON.stringify({ message: err.message }),
+              };
+            }
+          };
+      MemorySize: 128
+      Role: !Sub arn:aws:iam::${AWS::AccountId}:role/LabRole
+      Runtime: nodejs20.x
+      Timeout: 3
+      TracingConfig:
+        Mode: PassThrough
+      EphemeralStorage:
+        Size: 512
+  LambdaGetNoteById:
+    Type: AWS::Lambda::Function
+    Properties:
+      Description: getNoteById
+      FunctionName: get-note-by-id-fn
+      Handler: index.handler
+      Architectures:
+        - x86_64
+      Code:
+        ZipFile: |
+          const pkg = require('@aws-sdk/lib-dynamodb');
+          const { DynamoDBDocumentClient, QueryCommand } = pkg;
+          const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
+
+          const dynamodbClient = new DynamoDBClient({});
+          const dynamo = DynamoDBDocumentClient.from(dynamodbClient);
+          const notesTableName = 'notes';
+
+          exports.handler = async (event, context) => {
+            try {
+              if (event?.pathParameters && event?.pathParameters?.id) {
+                const noteId = event.pathParameters.id;
+                console.log({ noteId });
+                const params = {
+                  TableName: notesTableName,
+                  KeyConditionExpression: 'id = :id',
+                  ExpressionAttributeValues: {
+                    ':id': noteId,
+                  },
+                };
+                const { Items } = await dynamo.send(new QueryCommand(params));
+                console.log({ Items });
+                if (Items.length === 0) {
+                  return {
+                    statusCode: 404,
+                    body: JSON.stringify({ message: 'Note not found' }),
+                  };
+                }
+                return {
+                  statusCode: 200,
+                  body: JSON.stringify(Items[0]),
+                };
+              } else {
+                return {
+                  statusCode: 500,
+                  body: JSON.stringify({ message: 'error' }),
+                };
+              }
+            } catch (err) {
+              return {
+                statusCode: 500,
+                body: JSON.stringify({ message: err }),
+              };
+            }
+          };
+      MemorySize: 128
+      Role: !Sub arn:aws:iam::${AWS::AccountId}:role/LabRole
+      Runtime: nodejs20.x
+      Timeout: 3
+      TracingConfig:
+        Mode: PassThrough
+      EphemeralStorage:
+        Size: 512
+  LambdaUpdateNote:
+    Type: AWS::Lambda::Function
+    Properties:
+      Description: updateNote
+      FunctionName: update-note-fn
+      Handler: index.handler
+      Architectures:
+        - x86_64
+      Code:
+        ZipFile: |
+          const { DynamoDBClient } = require("@aws-sdk/client-dynamodb");
+          const { DynamoDBDocumentClient, UpdateCommand } = require("@aws-sdk/lib-dynamodb");
+
+          const dynamoClient = new DynamoDBClient();
+          const documentClient = DynamoDBDocumentClient.from(dynamoClient);
+
+          const headers = {
+            "Access-Control-Allow-Headers": "*",
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "DELETE,GET,HEAD,OPTIONS,PATCH,POST,PUT"
+          }
+
+          exports.handler = async (event, context) => {
+            try {
+              if (event?.pathParameters && event?.pathParameters?.id) {
+                const noteId = event.pathParameters.id;
+                const updatedNote = JSON.parse(event.body);
+                let updateExpression = 'SET ';
+                const expressionAttributeNames = {};
+                const expressionAttributeValues = {};
+                if (updatedNote.content) {
+                  updateExpression += '#content = :content';
+                  expressionAttributeNames['#content'] = 'content';
+                  expressionAttributeValues[':content'] = updatedNote.content;
+                }
+                if (updatedNote.title) {
+                  if (updateExpression !== 'SET ') updateExpression += ', ';
+                  updateExpression += '#title = :title';
+                  expressionAttributeNames['#title'] = 'title';
+                  expressionAttributeValues[':title'] = updatedNote.title;
+                }
+                const params = {
+                  TableName: 'notes',
+                  Key: {
+                    id: noteId,
+                  },
+                  UpdateExpression: updateExpression,
+                  ExpressionAttributeNames: expressionAttributeNames,
+                  ExpressionAttributeValues: expressionAttributeValues,
+                  ReturnValues: 'ALL_NEW',
+                };
+                const command = new UpdateCommand(params);
+                const { Attributes } = await documentClient.send(command);
+                const response = {
+                  statusCode: 200,
+                  headers,
+                  body: JSON.stringify(Attributes),
+                };
+                console.log({ response })
+                return response;
+              } else {
+                return {
+                  statusCode: 500,
+                  headers,
+                  body: JSON.stringify({ message: 'error' }),
+                };
+              }
+            } catch (err) {
+              return {
+                statusCode: 400,
+                headers,
+                body: JSON.stringify({ message: err.stack }),
+              };
+            }
+          };
+      MemorySize: 128
+      Role: !Sub arn:aws:iam::${AWS::AccountId}:role/LabRole
+      Runtime: nodejs20.x
+      Timeout: 3
+      TracingConfig:
+        Mode: PassThrough
+      EphemeralStorage:
+        Size: 512
+  LambdaDeleteNote:
+    Type: AWS::Lambda::Function
+    Properties:
+      Description: deleteNote
+      FunctionName: delete-note-fn
+      Handler: index.handler
+      Architectures:
+        - x86_64
+      Code:
+        ZipFile: |
+          const { DynamoDBClient } = require("@aws-sdk/client-dynamodb");
+          const { DynamoDBDocumentClient, DeleteCommand } = require("@aws-sdk/lib-dynamodb");
+
+          const dynamoClient = new DynamoDBClient();
+          const documentClient = DynamoDBDocumentClient.from(dynamoClient);
+
+          exports.handler = async (event, context) => {
+            try {
+              const noteId = event.pathParameters.id;
+              const params = {
+                TableName: 'notes',
+                Key: {
+                  id: noteId,
+                },
+              };
+              await documentClient.send(new DeleteCommand(params));
+              return {
+                statusCode: 200,
+                body: JSON.stringify({ message: 'Note deleted' }),
+              };
+            } catch (err) {
+              return {
+                statusCode: 500,
+                body: JSON.stringify({ message: err.message }),
+              };
+            }
+          };
+      MemorySize: 128
+      Role: !Sub arn:aws:iam::${AWS::AccountId}:role/LabRole
+      Runtime: nodejs20.x
+      Timeout: 3
+      TracingConfig:
+        Mode: PassThrough
+      EphemeralStorage:
+        Size: 512
+  LambdaCreateNote:
+    Type: AWS::Lambda::Function
+    Properties:
+      Description: createNote
+      FunctionName: create-note-fn
+      Handler: index.handler
+      Architectures:
+        - x86_64
+      Code:
+        ZipFile: |
+          const { DynamoDBClient, PutItemCommand } = require("@aws-sdk/client-dynamodb");
+          const dynamodbClient = new DynamoDBClient({});
+          const headers = {
+            'Access-Control-Allow-Origin' : '*',
+            'Access-Control-Allow-Headers': '*',
+            'Access-Control-Allow-Methods': '*',
+            'Content-Type': 'application/json'
+          };
+          const notesTableName = 'notes';
+          exports.handler = async (event, context) => {
+            try {
+              const { title, content } = JSON.parse(event.body);
+              const newNote = {
+                id: { S: Date.now().toString() },
+                title: { S: title },
+                content: { S: content },
+                date: { S: new Date().toISOString() },
+              };
+              const params = {
+                TableName: notesTableName,
+                Item: newNote,
+              };
+              await dynamodbClient.send(new PutItemCommand(params));
+              return {
+                statusCode: 201,
+                body: JSON.stringify({
+                  id: newNote.id.S,
+                  title: newNote.title.S,
+                  content: newNote.content.S,
+                  date: newNote.date.S,
+                }),
+                headers,
+              };
+            } catch (err) {
+              console.log('Error:', err);
+              return {
+                statusCode: 500,
+                body: JSON.stringify({ message: 'Internal server error' }),
+                headers,
+              };
+            }
+          };
+      MemorySize: 128
+      Role: !Sub arn:aws:iam::${AWS::AccountId}:role/LabRole
+      Runtime: nodejs20.x
+      Timeout: 3
+      TracingConfig:
+        Mode: PassThrough
+      EphemeralStorage:
+        Size: 512
+  LambdaOptionsResponse:
+    Type: AWS::Lambda::Function
+    Properties:
+      Description: optionResponse
+      FunctionName: option-response-fn
+      Handler: index.handler
+      Architectures:
+        - x86_64
+      Code:
+        ZipFile: |
+          exports.handler = async (event) => {
+            const response = {
+              statusCode: 200,
+              headers: {
+                "Access-Control-Allow-Headers": "Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token",
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "PUT, GET, HEAD, POST, DELETE, OPTIONS"
+              },
+              body: JSON.stringify('Hello from Lambda!'),
+            };
+            console.log({ response });
+            return response;
+          };
+      MemorySize: 128
+      Role: !Sub arn:aws:iam::${AWS::AccountId}:role/LabRole
+      Runtime: nodejs20.x
+      Timeout: 3
+      TracingConfig:
+        Mode: PassThrough
+      EphemeralStorage:
+        Size: 512
+  OptionsLambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !GetAtt LambdaOptionsResponse.Arn
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ApiGatewayRestApi}/*/OPTIONS/notesapp
+  OptionsLambdaPermission2:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !GetAtt LambdaOptionsResponse.Arn
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ApiGatewayRestApi}/*/OPTIONS/notesapp/*
+  CreateNoteLambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !GetAtt LambdaCreateNote.Arn
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ApiGatewayRestApi}/*/POST/notesapp
+  GetAllNoteLambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !GetAtt LambdaGetAllNote.Arn
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ApiGatewayRestApi}/*/GET/notesapp
+  GetNoteByIdLambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !GetAtt LambdaGetNoteById.Arn
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ApiGatewayRestApi}/*/GET/notesapp/*
+  UpdateNoteLambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !GetAtt LambdaUpdateNote.Arn
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ApiGatewayRestApi}/*/PUT/notesapp/*
+  DeleteNoteLambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !GetAtt LambdaDeleteNote.Arn
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ApiGatewayRestApi}/*/DELETE/notesapp/*
+  ApiGatewayRestApi:
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      Name: rest-api
+      ApiKeySourceType: HEADER
+      EndpointConfiguration:
+        Types:
+          - REGIONAL
+  ApiGatewayStage:
+    Type: AWS::ApiGateway::Stage
+    Properties:
+      StageName: development
+      DeploymentId: !Ref ApiGatewayDeployment
+      RestApiId: !Ref ApiGatewayRestApi
+      CacheClusterEnabled: false
+      CacheClusterSize: '0.5'
+      TracingEnabled: false
+  ApiGatewayDeployment:
+    Type: AWS::ApiGateway::Deployment
+    Properties:
+      RestApiId: !Ref ApiGatewayRestApi
+    DependsOn:
+      - GetNoteByIdApiGatewayMethod
+      - DeleteNoteApiGatewayMethod
+      - UpdateNoteApiGatewayMethod
+      - OptionsProxyApiGatewayMethod
+      - UpdateNoteApiGatewayMethod
+      - GetAllNoteApiGatewayMethod
+      - CreateNoteApiGatewayMethod
+      - OptionsProxyApiGatewayMethod2
+  ApiGatewayResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref ApiGatewayRestApi
+      PathPart: '{id+}'
+      ParentId: !Ref ApiGatewayResource2
+  ApiGatewayResource2:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref ApiGatewayRestApi
+      PathPart: notesapp
+      ParentId: !GetAtt ApiGatewayRestApi.RootResourceId
+  GetNoteByIdApiGatewayMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      ApiKeyRequired: false
+      AuthorizationType: NONE
+      HttpMethod: GET
+      Integration:
+        CacheKeyParameters:
+          - method.request.path.id
+        CacheNamespace: !Ref ApiGatewayResource
+        ContentHandling: CONVERT_TO_TEXT
+        IntegrationHttpMethod: POST
+        IntegrationResponses:
+          - ResponseTemplates: {}
+            StatusCode: '200'
+        PassthroughBehavior: WHEN_NO_MATCH
+        TimeoutInMillis: 29000
+        Type: AWS_PROXY
+        Uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${LambdaGetNoteById}/invocations
+      MethodResponses:
+        - ResponseModels:
+            application/json: Empty
+          StatusCode: '200'
+      RestApiId: !Ref ApiGatewayRestApi
+      ResourceId: !Ref ApiGatewayResource
+      RequestParameters:
+        method.request.path.id: true
+      RequestModels: {}
+  DeleteNoteApiGatewayMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref ApiGatewayRestApi
+      ResourceId: !Ref ApiGatewayResource
+      HttpMethod: DELETE
+      AuthorizationType: NONE
+      ApiKeyRequired: false
+      RequestParameters:
+        method.request.path.id: true
+      RequestModels: {}
+      MethodResponses:
+        - ResponseModels:
+            application/json: Empty
+          StatusCode: '200'
+      Integration:
+        CacheKeyParameters:
+          - method.request.path.id
+        CacheNamespace: !Ref ApiGatewayResource
+        ContentHandling: CONVERT_TO_TEXT
+        IntegrationHttpMethod: POST
+        IntegrationResponses:
+          - ResponseTemplates: {}
+            StatusCode: '200'
+        PassthroughBehavior: WHEN_NO_MATCH
+        TimeoutInMillis: 29000
+        Type: AWS_PROXY
+        Uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${LambdaDeleteNote}/invocations
+  UpdateNoteApiGatewayMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref ApiGatewayRestApi
+      ResourceId: !Ref ApiGatewayResource
+      HttpMethod: PUT
+      AuthorizationType: NONE
+      ApiKeyRequired: false
+      RequestParameters:
+        method.request.path.id: true
+      RequestModels: {}
+      MethodResponses:
+        - ResponseModels:
+            application/json: Empty
+          StatusCode: '200'
+      Integration:
+        CacheKeyParameters:
+          - method.request.path.id
+        CacheNamespace: !Ref ApiGatewayResource
+        ContentHandling: CONVERT_TO_TEXT
+        IntegrationHttpMethod: POST
+        IntegrationResponses:
+          - ResponseTemplates: {}
+            StatusCode: '200'
+        PassthroughBehavior: WHEN_NO_MATCH
+        TimeoutInMillis: 29000
+        Type: AWS_PROXY
+        Uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${LambdaUpdateNote}/invocations
+  OptionsProxyApiGatewayMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref ApiGatewayRestApi
+      ResourceId: !Ref ApiGatewayResource
+      HttpMethod: OPTIONS
+      AuthorizationType: NONE
+      ApiKeyRequired: false
+      RequestParameters:
+        method.request.path.id: true
+      RequestModels: {}
+      MethodResponses:
+        - ResponseModels:
+            application/json: Empty
+          StatusCode: '200'
+      Integration:
+        CacheKeyParameters:
+          - method.request.path.id
+        CacheNamespace: !Ref ApiGatewayResource
+        ContentHandling: CONVERT_TO_TEXT
+        IntegrationHttpMethod: POST
+        IntegrationResponses:
+          - ResponseTemplates: {}
+            StatusCode: '200'
+        PassthroughBehavior: WHEN_NO_MATCH
+        TimeoutInMillis: 29000
+        Type: AWS_PROXY
+        Uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${LambdaOptionsResponse}/invocations
+  GetAllNoteApiGatewayMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref ApiGatewayRestApi
+      ResourceId: !Ref ApiGatewayResource2
+      HttpMethod: GET
+      AuthorizationType: NONE
+      ApiKeyRequired: false
+      RequestParameters: {}
+      RequestModels: {}
+      MethodResponses:
+        - ResponseModels:
+            application/json: Empty
+          StatusCode: '200'
+      Integration:
+        CacheNamespace: !Ref ApiGatewayResource2
+        ContentHandling: CONVERT_TO_TEXT
+        IntegrationHttpMethod: POST
+        IntegrationResponses:
+          - ResponseTemplates: {}
+            StatusCode: '200'
+        PassthroughBehavior: WHEN_NO_MATCH
+        TimeoutInMillis: 29000
+        Type: AWS_PROXY
+        Uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${LambdaGetAllNote}/invocations
+  CreateNoteApiGatewayMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref ApiGatewayRestApi
+      ResourceId: !Ref ApiGatewayResource2
+      HttpMethod: POST
+      AuthorizationType: NONE
+      ApiKeyRequired: false
+      RequestParameters: {}
+      RequestModels: {}
+      MethodResponses:
+        - ResponseModels:
+            application/json: Empty
+          StatusCode: '200'
+      Integration:
+        CacheNamespace: !Ref ApiGatewayResource2
+        ContentHandling: CONVERT_TO_TEXT
+        IntegrationHttpMethod: POST
+        IntegrationResponses:
+          - ResponseTemplates: {}
+            StatusCode: '200'
+        PassthroughBehavior: WHEN_NO_MATCH
+        TimeoutInMillis: 29000
+        Type: AWS_PROXY
+        Uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${LambdaCreateNote}/invocations
+  OptionsProxyApiGatewayMethod2:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref ApiGatewayRestApi
+      ResourceId: !Ref ApiGatewayResource2
+      HttpMethod: OPTIONS
+      AuthorizationType: NONE
+      ApiKeyRequired: false
+      # RequestParameters:
+      #   method.request.path.id: true
+      RequestModels: {}
+      MethodResponses:
+        - ResponseModels:
+            application/json: Empty
+          StatusCode: '200'
+      Integration:
+        # CacheKeyParameters:
+        #   - method.request.path.id
+        CacheNamespace: !Ref ApiGatewayResource2
+        ContentHandling: CONVERT_TO_TEXT
+        IntegrationHttpMethod: POST
+        IntegrationResponses:
+          - ResponseTemplates: {}
+            StatusCode: '200'
+        PassthroughBehavior: WHEN_NO_MATCH
+        TimeoutInMillis: 29000
+        Type: AWS_PROXY
+        Uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${LambdaOptionsResponse}/invocations
+  
+  CognitoUserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: notesCloudAppUserPool
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 6
+          RequireUppercase: false
+          RequireLowercase: false
+          RequireNumbers: false
+          RequireSymbols: false
+          TemporaryPasswordValidityDays: 7
+      UsernameConfiguration:
+        CaseSensitive: false
+      AutoVerifiedAttributes:
+        - email
+      UsernameAttributes:
+        - email
+      MfaConfiguration: 'OFF'
+      VerificationMessageTemplate:
+        DefaultEmailOption: CONFIRM_WITH_CODE
+      EmailConfiguration:
+        EmailSendingAccount: COGNITO_DEFAULT
+      AdminCreateUserConfig:
+        AllowAdminCreateUserOnly: false
+      UserPoolTags: {}
+      AccountRecoverySetting:
+        RecoveryMechanisms:
+          - Priority: 1
+            Name: verified_email
+  CognitoUserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      ClientName: appClient
+      UserPoolId: !Ref CognitoUserPool
+      RefreshTokenValidity: 30
+      ExplicitAuthFlows:
+        - ALLOW_REFRESH_TOKEN_AUTH
+        - ALLOW_USER_SRP_AUTH
+      PreventUserExistenceErrors: ENABLED
+      AllowedOAuthFlowsUserPoolClient: false
+      IdTokenValidity: 60
+      AccessTokenValidity: 60
+      TokenValidityUnits:
+        AccessToken: minutes
+        IdToken: minutes
+        RefreshToken: days
+      ReadAttributes:
+        - address
+        - birthdate
+        - email
+        - email_verified
+        - family_name
+        - gender
+        - given_name
+        - locale
+        - middle_name
+        - name
+        - nickname
+        - phone_number
+        - phone_number_verified
+        - picture
+        - preferred_username
+        - profile
+        - updated_at
+        - website
+        - zoneinfo
+      WriteAttributes:
+        - address
+        - birthdate
+        - email
+        - family_name
+        - gender
+        - given_name
+        - locale
+        - middle_name
+        - name
+        - nickname
+        - phone_number
+        - picture
+        - preferred_username
+        - profile
+        - updated_at
+        - website
+        - zoneinfo
+  DynamoDBTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+      ProvisionedThroughput:
+        ReadCapacityUnits: 5
+        WriteCapacityUnits: 5
+      TableName: notesCloudTable
+  SNSTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: snsTopic
+      TopicName: notes-app-cloud-sns-topic
+  SNSTopicPolicy:
+    Type: AWS::SNS::TopicPolicy
+    Properties:
+      PolicyDocument: !Sub '{"Version":"2008-10-17","Id":"__default_policy_ID","Statement":[{"Sid":"__default_statement_ID","Effect":"Allow","Principal":{"AWS":"*"},"Action":["SNS:Publish","SNS:RemovePermission","SNS:SetTopicAttributes","SNS:DeleteTopic","SNS:ListSubscriptionsByTopic","SNS:GetTopicAttributes","SNS:AddPermission","SNS:Subscribe"],"Resource":"arn:aws:sns:${AWS::Region}:${AWS::AccountId}:notes-app-cloud-sns-topic","Condition":{"StringEquals":{"AWS:SourceOwner":"${AWS::AccountId}"}}}]}'
+      Topics:
+        - !Ref SNSTopic
+  SNSSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      TopicArn: !Ref SNSTopic
+      Endpoint: kazinezamul3@gmail.com
+      Protocol: email
+      Region: !Ref AWS::Region
+  ECRRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: notes-app-cloud-repo
+      LifecyclePolicy:
+        RegistryId: !Ref AWS::AccountId
+        LifecyclePolicyText: |
+          {
+            "rules": [
+              {
+                "rulePriority": 1,
+                "description": "Expire images older than 15 days",
+                "selection": {
+                  "tagStatus": "untagged",
+                  "countType": "sinceImagePushed",
+                  "countUnit": "days",
+                  "countNumber": 15
+                },
+                "action": {
+                  "type": "expire"
+                }
+              }
+            ]
+          }
+  ECSCluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: !Ref ECSClusterName
+      CapacityProviders:
+        - FARGATE
+        - FARGATE_SPOT
+      ClusterSettings:
+        - Name: containerInsights
+          Value: enabled
+      Configuration:
+        ExecuteCommandConfiguration:
+          Logging: DEFAULT
+      ServiceConnectDefaults:
+        Namespace: !Ref ECSClusterName
+      Tags: []
+  ECSTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      ContainerDefinitions:
+        - Environment:
+            - Name: VITE_AKID
+              Value: ASIAQ3EGROXQFZR6FTSM
+            - Name: VITE_SAK
+              Value: iOtSMj79p61jD5iLqC7648FpbALPk5V0UPW3FiqE
+            - Name: VITE_ST
+              Value: IQoJb3JpZ2luX2VjEJj//////////wEaCXVzLXdlc3QtMiJHMEUCIQCiVJzo63/9uOnRL70bTimWV0LOuzU03TpJeMlnO3uExQIgQEYA4oxmchaIn36fJ7TmSy9pj2Sr2DXBWGM26MW8cDcqsgIIwf//////////ARAAGgwwNTgyNjQyMjExNTIiDHo0346kfufeJq4xjCqGAq8a1Yz2cND3Bir7gLFtFe1W81LieYwTsdEc6Up0cJFl5KPcgfHazIByX1AI8IpAy81VnBQVMOJTDGivpT8wtuG7+0jLUdKGd4eAsJo7yX7lJ9znz5LT9rOEvTkf5PL43mWc/wiKwioOOcSaVpdGf9xWTpeifjk9AOutDf8QFu2nnvNVnAXtYmq3lQkHABG2+zWKGzP62JBHIxcLTGtwoutUNzpH6g3pm89TGscIzZQlgbBOOTjQnbILWae2ufVQaFxCno9fyH4Xt4I46TbXAEDxoZjpAZy5H3ATXbug7KG6+LxA7XIQyRbov+avSPrJC+QLdBQBAIPOQ/StiCXkc+4HQFLTKjUw3dPFsAY6nQF5DPskUtFPjWi+m0d7rhYGiwhc4kn5QVaP3KFafjLAx7UZSka3gTuwyl5SqsuSQJ0TUWySC+Esor4Wy2sWZnbFlLFN7K2KZeyv1GWgkOYJbV4ekcZcgONuaEXpS+q5AYQEZN2mQ5Mu70uAX+uR8kn2Ia/kwcrI+9rfRlGnkJGXhodY19jHTC9Pc3vWZBRpEUz7z6VLCjYdlYulzarE
+            - Name: VITE_AWS_REGION
+              Value: !Ref AWS::Region
+            - Name: VITE_SNS_TOPIC_ARN
+              Value: !Ref SNSTopic
+          Essential: true
+          Image: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/notes-app-cloud-repo:latest
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-create-group: 'true'
+              awslogs-group: /ecs/notes-app-cloud-task
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: ecs
+          Name: notes-app-cloud-container
+          PortMappings:
+            - ContainerPort: 80
+              HostPort: 80
+              Protocol: tcp
+      Family: notes-app-cloud-task
+      TaskRoleArn: !Sub arn:aws:iam::${AWS::AccountId}:role/LabRole
+      ExecutionRoleArn: !Sub arn:aws:iam::${AWS::AccountId}:role/LabRole
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+      Cpu: 1024
+      Memory: 3072
+  ECSService:
+    Type: AWS::ECS::Service
+    DependsOn: Listener
+    Properties:
+      Cluster: !Ref ECSCluster
+      CapacityProviderStrategy:
+        - CapacityProvider: FARGATE
+          Base: 0
+          Weight: 1
+      DeploymentConfiguration:
+        MaximumPercent: 200
+        MinimumHealthyPercent: 100
+        DeploymentCircuitBreaker:
+          Enable: true
+          Rollback: true
+      DeploymentController:
+        Type: ECS
+      DesiredCount: 2
+      EnableECSManagedTags: true
+      HealthCheckGracePeriodSeconds: 60
+      LoadBalancers:
+        - ContainerName: notes-app-cloud-container
+          ContainerPort: 80
+          TargetGroupArn: !Ref TargetGroup
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: ENABLED
+          SecurityGroups: !If
+            - HasSecurityGroups
+            - !Ref SecurityGroupIds
+            - !Ref AWS::NoValue
+          Subnets: !If
+            - HasSubnets
+            - !Ref SubnetIds
+            - !Ref AWS::NoValue
+      PlatformVersion: LATEST
+      TaskDefinition: !Ref ECSTaskDefinition
+      ServiceName: !Ref ECSServiceName
+      ServiceConnectConfiguration:
+        Enabled: false
+      SchedulingStrategy: REPLICA
+      Tags: []
+  SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: notes-app-cloud-security-group
+      GroupName: notes-app-cloud-security-group
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - FromPort: -1
+          ToPort: -1
+          IpProtocol: '-1'
+          CidrIp: 0.0.0.0/0
+        - FromPort: -1
+          ToPort: -1
+          IpProtocol: '-1'
+          CidrIpv6: '::/0'
+        - FromPort: 80
+          ToPort: 80
+          IpProtocol: tcp
+          CidrIp: 0.0.0.0/0
+        - FromPort: 80
+          ToPort: 80
+          IpProtocol: tcp
+          CidrIpv6: '::/0'
+  LoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Type: application
+      Name: notes-app-cloud-loadbalancer
+      SecurityGroups:
+        - !Ref SecurityGroup
+      Subnets: !If
+        - HasSubnets
+        - !Ref SubnetIds
+        - !Ref AWS::NoValue
+  TargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckPath: /
+      Name: notes-app-cloud-target-group
+      Port: 80
+      Protocol: HTTP
+      TargetType: ip
+      HealthCheckProtocol: HTTP
+      VpcId: !Ref VpcId
+      TargetGroupAttributes:
+        - Key: deregistration_delay.timeout_seconds
+          Value: 300
+  Listener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref TargetGroup
+      LoadBalancerArn: !Ref LoadBalancer
+      Port: 80
+      Protocol: HTTP
+Outputs:
+  LambdaGetAllNote:
+    Value: !Ref LambdaGetAllNote
+    Description: Lambda function to get all notes
+  LambdaGetNoteById:
+    Value: !Ref LambdaGetNoteById
+    Description: Lambda function to get a note by ID
+  LambdaUpdateNote:
+    Value: !Ref LambdaUpdateNote
+    Description: Lambda function to update a note
+  LambdaDeleteNote:
+    Value: !Ref LambdaDeleteNote
+    Description: Lambda function to delete a note
+  LambdaCreateNote:
+    Value: !Ref LambdaCreateNote
+    Description: Lambda function to create a note
+  LambdaOptionsResponse:
+    Value: !Ref LambdaOptionsResponse
+    Description: Lambda function to handle OPTIONS request
+  ApiGatewayRestApi:
+    Description: rest api got created
+    Value: !Ref ApiGatewayRestApi
+  ApiGatewayStage:
+    Description: api stage got created
+    Value: !Ref ApiGatewayStage
+  ApiGatewayResource:
+    Description: resource 1 created
+    Value: !Ref ApiGatewayResource
+  ApiGatewayResource2:
+    Description: resource 2 created
+    Value: !Ref ApiGatewayResource2
+  GetNoteByIdApiGatewayMethod:
+    Description: GetNoteById api created
+    Value: !Ref GetNoteByIdApiGatewayMethod
+  DeleteNoteApiGatewayMethod:
+    Description: DeleteNote api created
+    Value: !Ref DeleteNoteApiGatewayMethod
+  UpdateNoteApiGatewayMethod:
+    Description: update note api created
+    Value: !Ref UpdateNoteApiGatewayMethod
+  DeleteNoteLambdaPermission:
+    Description: delete note api created
+    Value: !Ref DeleteNoteLambdaPermission
+  ApiGatewayDeployment:
+    Description: api deployed successfully.
+    Value: !Ref ApiGatewayDeployment
+  CognitoUserPool:
+    Description: user pool created
+    Value: !Ref CognitoUserPool
+  CognitoUserPoolClient:
+    Description: user pool client created successfully.
+    Value: !Ref CognitoUserPoolClient
+  DynamoDBTable:
+    Description: dynamo table created successfully.
+    Value: !Ref DynamoDBTable
+  SNSTopic:
+    Description: sns topic created
+    Value: !Ref SNSTopic
+  SnsTopicPolicy:
+    Description: sns policy created
+    Value: !Ref SNSTopicPolicy
+  SnsSubscription:
+    Description: sns subscription created successfully.
+    Value: !Ref SNSSubscription
+  ECRRepository:
+    Description: repo created
+    Value: !Ref ECRRepository
+  ECSCluster:
+    Description: cluster created
+    Value: !Ref ECSCluster
+  ECSTaskDefinition:
+    Description: task created
+    Value: !Ref ECSTaskDefinition
+  ECSService:
+    Description: service created
+    Value: !Ref ECSService
+  SecurityGroup:
+    Description: security group created
+    Value: !Ref SecurityGroup
+  LoadBalancer:
+    Description: load balancer created
+    Value: !Ref LoadBalancer
+  TargetGroup:
+    Description: target group created
+    Value: !Ref TargetGroup
+  Listener:
+    Description: listener created successfully.
+    Value: !Ref Listener
+Conditions:
+  HasSubnets: !Not
+    - !Equals
+      - !Join
+        - ''
+        - !Ref SubnetIds
+      - ''
+  HasSecurityGroups: !Not
+    - !Equals
+      - !Join
+        - ''
+        - !Ref SecurityGroupIds
+      - ''

@@ -1,0 +1,50 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Resources:
+  DynamoDBTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+      ProvisionedThroughput:
+        ReadCapacityUnits: 5
+        WriteCapacityUnits: 5
+      TableName: notesCloudTable
+
+  SNSTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: snsTopic
+      TopicName: notesCloudApp
+
+  SNSTopicPolicy:
+    Type: AWS::SNS::TopicPolicy
+    Properties:
+      PolicyDocument: !Sub '{"Version":"2008-10-17","Id":"__default_policy_ID","Statement":[{"Sid":"__default_statement_ID","Effect":"Allow","Principal":{"AWS":"*"},"Action":["SNS:Publish","SNS:RemovePermission","SNS:SetTopicAttributes","SNS:DeleteTopic","SNS:ListSubscriptionsByTopic","SNS:GetTopicAttributes","SNS:AddPermission","SNS:Subscribe"],"Resource":"arn:aws:sns:${AWS::Region}:${AWS::AccountId}:${DynamoDBTable}CloudApp","Condition":{"StringEquals":{"AWS:SourceOwner":"${AWS::AccountId}"}}}]}'
+      Topics:
+        - !Ref SNSTopic
+
+  SNSSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      TopicArn: !Ref SNSTopic
+      Endpoint: kazinezamul3@gmail.com
+      Protocol: email
+      Region: !Ref AWS::Region
+
+Outputs:
+  DynamoDBTableStreamARN:
+    Description: ARN of the DynamoDB table stream
+    Value: !GetAtt DynamoDBTable.StreamArn
+  SnsTopicARN:
+    Description: ARN of the SNS topic
+    Value: !Ref SNSTopic
+  SnsTopicPolicy:
+    Description: ARN of the SNS topic policy
+    Value: !Ref SNSTopicPolicy
+  SnsSubscriptionArn:
+    Description: ARN of the SNS subscription
+    Value: !Ref SNSSubscription
