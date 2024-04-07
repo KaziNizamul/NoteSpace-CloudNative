@@ -19,8 +19,16 @@ const Navbar = () => {
       name: "New Note",
       visible: location.pathname !== "/new-note",
     },
-    { path: "/login", name: "Login", visible: !isUserLoggedIn },
-    { path: "/register", name: "Register", visible: !isUserLoggedIn },
+    {
+      path: "/login",
+      name: "Login",
+      visible: !isUserLoggedIn && location.pathname !== "/login",
+    },
+    {
+      path: "/register",
+      name: "Register",
+      visible: !isUserLoggedIn && location.pathname !== "/register",
+    },
     {
       path: "/logout",
       name: "Logout",
