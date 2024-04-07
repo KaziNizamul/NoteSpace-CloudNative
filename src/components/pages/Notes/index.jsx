@@ -41,8 +41,8 @@ const NotesPage = () => {
 
   return (
     <div className={styles["notes-page"]}>
+      <h1>All Notes</h1>
       <div className={styles["notes-header"]}>
-        <h1>Notes</h1>
         <Button variant="primary" onClick={handleNewNote}>
           New Note
         </Button>

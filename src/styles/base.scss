@@ -1,13 +1,15 @@
 @import 'variables';
 
 body {
+  position: absolute;
+  inset: 0;
+  background-position: center;
+  background-repeat: no-repeat;
+  border-color: #736b5e;
+  color: #e8e6e3;
+  background-image: url(https://i.imgur.com/C0REvm2.png);
   font-family: $font-family-base;
-  font-size: $font-size-base;
-  line-height: $line-height-base;
-  color: $gray-800;
-  background-color: $gray-100;
-  margin: 0;
-  padding: 0;
+  background-color: rgb(30 41 59);
 }
 
 a {
@@ -19,26 +21,49 @@ a {
   }
 }
 
-h1, h2, h3, h4, h5, h6 {
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
   margin-top: 0;
   margin-bottom: $spacer;
   font-weight: 500;
   line-height: 1.2;
 }
 
-h1 { font-size: 2.5rem; }
-h2 { font-size: 2rem; }
-h3 { font-size: 1.75rem; }
-h4 { font-size: 1.5rem; }
-h5 { font-size: 1.25rem; }
-h6 { font-size: 1rem; }
+h1 {
+  font-size: 2.5rem;
+}
+
+h2 {
+  font-size: 2rem;
+}
+
+h3 {
+  font-size: 1.75rem;
+}
+
+h4 {
+  font-size: 1.5rem;
+}
+
+h5 {
+  font-size: 1.25rem;
+}
+
+h6 {
+  font-size: 1rem;
+}
 
 p {
   margin-top: 0;
   margin-bottom: $spacer;
 }
 
-ul, ol {
+ul,
+ol {
   margin-top: 0;
   margin-bottom: $spacer;
   padding-left: 2rem;

@@ -28,7 +28,7 @@ const LoginPage = () => {
     <div className={styles["login-page"]}>
       <div className={styles["login-form"]}>
         <h2>Login</h2>
-        {isError && <div>Error: {error.message}</div>}
+        {isError && <div className={styles.error}>{error.message}</div>}
         <form onSubmit={handleSubmit}>
           <Input
             label="Email"

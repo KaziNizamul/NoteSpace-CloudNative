@@ -1,30 +1,37 @@
 @import '../../../styles/variables';
 
 .note-item {
-  background-color: #fff;
-  border: $border-width solid $gray-300;
+  border: none;
   border-radius: $border-radius;
-  padding: $spacer;
-  box-shadow: 0 2px 4px rgba($gray-800, 0.1);
+  padding: 1.5rem 1.5rem 0.5rem 1.5rem;
+  box-shadow: 0 1px 2px 0 rgba($gray-800, 0.1), 0 1px 3px 1px rgba($gray-800, 0.1);
   transition: box-shadow 0.3s ease;
+  width: 240px;
+  height: 10rem;
+  display: grid;
+  grid-template-rows: 0.2fr 0.6fr 0.2fr;
+  position: relative;
 
   &:hover {
-    box-shadow: 0 4px 8px rgba($gray-800, 0.15);
+    box-shadow: 0 2px 4px 0 rgba($gray-800, 0.2), 0 2px 6px 2px rgba($gray-800, 0.2);
   }
 
   .note-title {
     margin-top: 0;
-    margin-bottom: $spacer * 0.5;
-    font-size: 1.25rem;
+    margin-bottom: $spacer * 0.75;
+    font-size: 1rem;
     font-weight: 500;
-    color: $gray-800;
+    color: #fff;
   }
 
   .note-content {
-    margin-bottom: $spacer * 0.5;
-    color: $gray-600;
+    margin-bottom: $spacer * 0.75;
+    color: #fff;
     font-size: 0.9rem;
     line-height: 1.4;
+    max-height: 80px;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .note-meta {
@@ -32,7 +39,7 @@
     justify-content: space-between;
     align-items: center;
     font-size: 0.8rem;
-    color: $gray-500;
+    color: #fff;
 
     .note-date {
       margin-right: $spacer * 0.5;
@@ -41,11 +48,25 @@
     .note-actions {
       display: flex;
       align-items: center;
+      opacity: 0;
+      transition: opacity 0.5s ease;
 
       .btn {
         font-size: 0.8rem;
         padding: $spacer * 0.25 $spacer * 0.5;
-        margin-left: $spacer * 0.5;
+        background-color: transparent;
+        border: none;
+        color: $gray-500;
+        cursor: pointer;
+
+        &:hover {
+          color: $gray-700;
+        }
+      }
+
+      &:hover {
+        opacity: 1;
+        transition: opacity cubic-bezier(0.6, 0.04, 0.98, 0.335);
       }
     }
   }

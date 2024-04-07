@@ -41,7 +41,7 @@ const RegisterPage = () => {
     <div className={styles["register-page"]}>
       <div className={styles["register-form"]}>
         <h2>Register</h2>
-        {isError && <div>Error: {error.message}</div>}
+        {isError && <div className={styles.error}>{error.message}</div>}
         {!needsVerification && (
           <form onSubmit={handleSubmit}>
             <Input

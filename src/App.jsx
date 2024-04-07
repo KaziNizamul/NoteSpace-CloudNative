@@ -6,7 +6,7 @@ import NewNote from "./components/pages/NewNotes";
 import Login from "./components/pages/Login";
 import Register from "./components/pages/Register";
 import EditNotePage from "./components/pages/EditNotePage";
-import ProtectedRoute from './components/routes/protectedRoute';
+import ProtectedRoute from "./components/routes/protectedRoute";
 
 function App() {
   const getProtectedComponent = (children) => {
