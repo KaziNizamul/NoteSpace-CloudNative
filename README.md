@@ -35,6 +35,12 @@ NoteSpace is a note-taking application built with React, designed to demonstrate
 - **Database**: Notes are stored in AWS DynamoDB.
 - **Infrastructure as Code**: AWS resources are defined and deployed using CloudFormation templates.
 
+## Demo
+
+https://github.com/KaziNizamul/NoteSpace-CloudNative/assets/19683035/cfff0af2-bc86-413b-a877-70ab1930ee26
+
+
+
 ## Setup
 
 ### Prerequisites
@@ -66,37 +72,69 @@ Deploy the CloudFormation stacks located in the `/cloudformation` directory to s
 aws cloudformation deploy --template-file cloudformation/stack.yaml --stack-name <stack_name>
 ```
 
-4. **Set up Environment Variables**
+## Deployment Overview:
 
-Configure the necessary environment variables for the frontend to interact with the deployed AWS services. This includes API endpoints, Cognito User Pool IDs, etc.
+The deployment process involves two scripts, app-deploy.sh and updateEnv.sh, along with docker-deploy.sh for containerization.
 
-5. **Run the Application Locally**
+
+`app-deploy.sh`: This script initiates the deployment process by first updating environment variables using updateEnv.sh. If successful, it proceeds to deploy Docker containers with docker-deploy.sh.
+
+`updateEnv.sh`: This script automatically sets up our project's environment variables by extracting AWS resource details and credentials, then writes them to a .env file.
+Here's what it does:
+
+- Sets the AWS region and SNS topic ARN directly.
+= Extracts AWS credentials (Access Key ID, Secret Access Key, Session Token) from the local AWS credentials file.
+- Fetches the Cognito User Pool ID and Client ID by querying AWS services.
+- Retrieves the API Gateway base URL for the "notes" service.
+- Environment Variables Extracted:
+	- VITE_AWS_REGION: The AWS region.
+	- VITE_SNS_TOPIC_ARN: The ARN for an SNS topic.
+	- VITE_AKID, VITE_SAK, VITE_ST: AWS credentials (Access Key ID, Secret Access Key, Session Token).
+	- VITE_USERPOOL_ID: Cognito User Pool ID.
+	- VITE_CLIENT_ID: Cognito User Pool Client ID.
+	- VITE_BASE_URL: API Gateway base URL.
+
+`docker-deploy.sh`: script is responsible for deploying the application using Docker. Here's a simplified breakdown of its steps:
+
+Build the Docker Image: Creates a Docker image named notes-app-cloud-repo from the Dockerfile in the project. This image includes the application and all its dependencies.
 
 ```bash
-npm start
+docker build -t <repo-name> .
 ```
-
-This command will start the development server using Vite, as configured in `vite.config.js`, and the application will be accessible at `http://localhost:80`.
-
-### Docker Setup
-
-To containerize the application, use the provided Dockerfile.
+Tag the Docker Image: Tags the recently built image with the repository location in AWS Elastic Container Registry (ECR), specifying it as the latest version. This step prepares the image to be pushed to ECR.
 
 ```bash
-docker build -t termproject .
-docker run -p 80:80 termproject
+docker tag <repo-name>:<tag> <ecr-docker-repo-url>
 ```
+Push the Docker Image to ECR: Uploads the tagged image to AWS ECR, making it available for deployment on AWS services like ECS or EKS.
 
+```bash
+docker push <ecr-docker-repo-url>:<tag>
+```
+This script automates the process of building, tagging, and pushing the Docker image to AWS, simplifying the deployment of the application in a containerized environment.
 This will build a Docker image for the project and run it, exposing the application on port 80.
 
-## Contributing
 
-Contributions are welcome! Please feel free to submit pull requests or open issues for bugs, feature requests, or documentation improvements.
+<hr>
 
-## License
+## Deployment & Access
 
-Specify the license under which the project is made available.
+The `docker-deploy.sh` script as mentioned above uploads our Docker image to `ECR`. This is our application's image repository.
 
----
+`ECS` uses the Docker image stored in ECR to run instances of our application. The `cloudformation/stack.yml` CloudFormation template we have sets up the ECS cluster, service, and task definition needed for this. It specifies:
 
-This README provides a basic overview and setup instructions for the term project. Adjustments and additional details should be added as necessary to match the project's current state and future developments.
+- ECS Cluster: A logical grouping of tasks or services.
+- Task Definition: Describes how a Docker container should launch. It references the Docker image in ECR.
+- Service: Ensures our application is running the specified number of instances as defined in the task definition.
+
+Once deployed, ECS manages the instantiation of our application containers based on the task definition.
+The ECS service is configured to use a load balancer, which distributes incoming traffic across the instances of our application.
+
+<hr> 
+
+`Accessing Deployed Application:` We can find the URL to access our deployed application in the ECS console. Under the "Tasks" section of our ECS service, we'll see the running instances of our task definition. 
+
+The load balancer associated with our ECS service will have a public DNS name, which serves as the URL to access our application.
+In summary, after our Docker image is pushed to ECR, ECS uses the configurations defined in our CloudFormation template (stack.yml) to deploy our application. The deployed application is accessible via a URL provided by the load balancer associated with our ECS service.
+
+
