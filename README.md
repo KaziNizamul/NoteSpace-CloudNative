@@ -13,9 +13,19 @@ NoteSpace is a note-taking application built with React, designed to demonstrate
   <code><img width="50" src="https://user-images.githubusercontent.com/25181517/190887795-99cb0921-e57f-430b-a111-e165deedaa36.png" alt="Ant Design" title="Ant Design"/></code>
 	<code><img width="50" src="https://user-images.githubusercontent.com/25181517/117207330-263ba280-adf4-11eb-9b97-0ac5b40bc3be.png" alt="Docker" title="Docker"/></code>
 	<code><img width="50" src="https://user-images.githubusercontent.com/25181517/183896132-54262f2e-6d98-41e3-8888-e40ab5a17326.png" alt="AWS" title="AWS"/></code>
-  <code><img width="50" height="40" src="https://unpkg.com/aws-icons@2.0.0/icons/architecture-service/AmazonCognito.svg" alt="AWS Icons" title="Cognito" /></code>
-
 </div>
+<br>
+<div align="center">
+	<code><img width="50" height="40" src="https://unpkg.com/aws-icons@2.0.0/icons/architecture-service/AmazonCognito.svg" alt="AWS Cognito" title="Cognito" /></code>
+  <code><img width="50" height="40" src="https://unpkg.com/aws-icons@2.0.0/icons/architecture-service/AmazonDynamoDB.svg" alt="AWS DynamoDB" title="DynamoDB" /></code>
+  <code><img width="50" height="40" src="https://unpkg.com/aws-icons@2.0.0/icons/architecture-service/AWSLambda.svg" alt="AWS Lambda" title="Lambda" /></code>
+  <code><img width="50" height="40" src="https://unpkg.com/aws-icons@2.0.0/icons/architecture-service/AmazonAPIGateway.svg" alt="AWS API Gateway" title="API Gateway" /></code>
+  <code><img width="50" height="40" src="https://unpkg.com/aws-icons@2.0.0/icons/architecture-service/AmazonSimpleNotificationService.svg" alt="AWS SNS" title="Simple Notify Service" /></code>
+  <code><img width="50" height="40" src="https://unpkg.com/aws-icons@2.0.0/icons/architecture-service/AmazonElasticContainerRegistry.svg" alt="AWS ECR" title="Elastic Container Registry" /></code>
+  <code><img width="50" height="40" src="https://unpkg.com/aws-icons@2.0.0/icons/architecture-service/AmazonElasticContainerService.svg" alt="AWS ECS" title="Elastic Container Service" /></code>
+  <code><img width="50" height="40" src="https://unpkg.com/aws-icons@2.0.0/icons/architecture-service/AWSCloudFormation.svg" alt="AWS Cloudformation" title="Cloudformation" /></code>
+</div>
+
 
 ## Features
 
@@ -53,7 +63,7 @@ npm install
 Deploy the CloudFormation stacks located in the `/cloudformation` directory to set up the required AWS resources (API Gateway, Cognito, DynamoDB, SNS, ECS, ECR, and Lambda functions).
 
 ```bash
-aws cloudformation deploy --template-file cloudformation/<template_name>.yaml --stack-name <stack_name>
+aws cloudformation deploy --template-file cloudformation/stack.yaml --stack-name <stack_name>
 ```
 
 4. **Set up Environment Variables**
