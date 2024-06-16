@@ -31,7 +31,8 @@ NoteSpace is a note-taking application built with React, designed to demonstrate
 
 ## Architecture Diagram
 
-<img src="./architecture.svg" alt="Architecture Diagram" title="Architecture Diagram" />
+![notespace](https://github.com/KaziNizamul/NoteSpace-CloudNative/assets/19683035/701ed096-d0bd-4ed8-b9b7-190fd9648448)
+
 
 <br>
 
