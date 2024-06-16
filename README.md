@@ -26,6 +26,14 @@ NoteSpace is a note-taking application built with React, designed to demonstrate
   <code><img width="50" height="40" src="https://unpkg.com/aws-icons@2.0.0/icons/architecture-service/AWSCloudFormation.svg" alt="AWS Cloudformation" title="Cloudformation" /></code>
 </div>
 
+<br>
+<br>
+
+## Architecture Diagram
+
+<img src="./architecture.svg" alt="Architecture Diagram" title="Architecture Diagram" />
+
+<br>
 
 ## Features
 
